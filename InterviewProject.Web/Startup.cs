@@ -1,11 +1,15 @@
-using System.IO;
+using InterviewProject.Core.Models.General;
+using InterviewProject.Services.WeatherForecast;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.SpaServices.ReactDevelopmentServer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Polly;
+using Polly.Extensions.Http;
+using Polly.Timeout;
+using System.Net.Http;
 
 namespace InterviewProject
 {
@@ -21,6 +25,7 @@ namespace InterviewProject
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.Configure<AppSettings>(Configuration);
 
             services.AddControllersWithViews();
 
@@ -29,6 +34,17 @@ namespace InterviewProject
             {
                 configuration.RootPath = "ClientApp/build";
             });
+
+            var retryPolicy = HttpPolicyExtensions
+              .HandleTransientHttpError()
+              .Or<TimeoutRejectedException>() // thrown by Polly's TimeoutPolicy if the inner execution times out
+              .RetryAsync(3);
+
+            var timeoutPolicy = Policy.TimeoutAsync<HttpResponseMessage>(30);
+
+            services.AddHttpClient<IWeatherForecastService, WeatherForecastService>()
+                .AddPolicyHandler(retryPolicy)
+                .AddPolicyHandler(timeoutPolicy);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

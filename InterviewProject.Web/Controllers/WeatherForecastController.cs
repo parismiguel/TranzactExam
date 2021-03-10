@@ -1,39 +1,57 @@
-﻿using System;
+﻿using InterviewProject.Core.Models;
+using InterviewProject.Core.Models.General;
+using InterviewProject.Core.Models.MetaWeather;
+using InterviewProject.Helpers;
+using InterviewProject.Services.WeatherForecast;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace InterviewProject.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("[controller]/[action]")]
     public class WeatherForecastController : ControllerBase
     {
-        private static readonly string[] Summaries = new[]
-        {
-            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-        };
-
+        private readonly IWeatherForecastService _weatherForecastService;
         private readonly ILogger<WeatherForecastController> _logger;
 
-        public WeatherForecastController(ILogger<WeatherForecastController> logger)
+        public WeatherForecastController(
+            IWeatherForecastService weatherForecastService,
+            ILogger<WeatherForecastController> logger)
         {
+            _weatherForecastService = weatherForecastService;
             _logger = logger;
         }
 
         [HttpGet]
-        public IEnumerable<WeatherForecast> Get()
+        public async Task<IEnumerable<WeatherForecast>> GetWeatherForecastAsync(string location)
         {
-            var rng = new Random();
-            return Enumerable.Range(1, 5).Select(index => new WeatherForecast
+            var weatherList = await _weatherForecastService.SearchLocationAsync(location);
+
+            if (weatherList.Status)
             {
-                Date = DateTime.Now.AddDays(index),
-                TemperatureC = rng.Next(-20, 55),
-                Summary = Summaries[rng.Next(Summaries.Length)]
-            })
-            .ToArray();
+                var weatherResponse = (List<Weather>)weatherList.Data;
+
+                if (weatherResponse.Count == 0)
+                {
+                    return new List<WeatherForecast>();
+                }
+
+                var locationId = weatherResponse.FirstOrDefault().Woeid;
+                var forecastResponse = await _weatherForecastService.ForecastByDateAsync(locationId);
+
+                if (forecastResponse.Status)
+                {
+                    var forecastList  = (List<ConsolidatedWeather>)forecastResponse.Data;
+
+                    return forecastList.Select(x=> x.ToWeatherForecast());
+                }
+            }
+
+            return new List<WeatherForecast>();
         }
     }
 }
